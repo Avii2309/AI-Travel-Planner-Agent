@@ -1,0 +1,17 @@
+{
+  "name": "ai-travel-planner-frontend",
+  "private": true,
+  "description": "Placeholder manifest; no frontend application has been implemented.",
+  "dependencies": {
+    "next": "latest",
+    "react": "latest",
+    "react-dom": "latest"
+  },
+  "devDependencies": {
+    "@types/node": "latest",
+    "@types/react": "latest",
+    "@types/react-dom": "latest",
+    "tailwindcss": "latest",
+    "typescript": "latest"
+  }
+}
