@@ -4,11 +4,12 @@ from enum import Enum
 from functools import lru_cache
 from pathlib import Path
 
-from pydantic import Field, field_validator
+from pydantic import Field, SecretStr, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 REPOSITORY_ROOT = Path(__file__).resolve().parents[3]
 BACKEND_ROOT = REPOSITORY_ROOT / "backend"
+INSECURE_DEVELOPMENT_JWT_SECRET = "replace-this-development-secret-before-production"
 
 
 class Environment(str, Enum):
@@ -77,6 +78,17 @@ class AppSettings(BaseSettings):
         ge=0,
         validation_alias="DATABASE_POOL_RECYCLE",
     )
+    jwt_secret_key: SecretStr = Field(
+        default=SecretStr(INSECURE_DEVELOPMENT_JWT_SECRET),
+        validation_alias="JWT_SECRET_KEY",
+    )
+    jwt_algorithm: str = Field(default="HS256", validation_alias="JWT_ALGORITHM")
+    jwt_access_token_expire_minutes: int = Field(
+        default=30,
+        ge=1,
+        le=1440,
+        validation_alias="JWT_ACCESS_TOKEN_EXPIRE_MINUTES",
+    )
 
     @field_validator("log_directory", mode="before")
     @classmethod
@@ -85,6 +97,17 @@ class AppSettings(BaseSettings):
 
         path = Path(value)
         return path if path.is_absolute() else REPOSITORY_ROOT / path
+
+    @model_validator(mode="after")
+    def validate_production_jwt_secret(self) -> "AppSettings":
+        """Prevent an insecure default JWT secret from reaching production."""
+
+        secret = self.jwt_secret_key.get_secret_value()
+        if self.environment is Environment.PRODUCTION and (
+            secret == INSECURE_DEVELOPMENT_JWT_SECRET or len(secret) < 32
+        ):
+            raise ValueError("JWT_SECRET_KEY must be a unique secret of at least 32 characters")
+        return self
 
 
 class DevelopmentSettings(AppSettings):

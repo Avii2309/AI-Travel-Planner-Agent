@@ -6,6 +6,7 @@ from collections.abc import AsyncIterator
 from fastapi import FastAPI
 
 from src.core.settings import AppSettings
+from src.auth.router import router as auth_router
 from src.infrastructure.database import create_database_engine
 from src.infrastructure.session import create_session_factory
 from src.presentation.api.exceptions.handlers import register_exception_handlers
@@ -44,5 +45,6 @@ def create_application(settings: AppSettings) -> FastAPI:
     register_middleware(app, settings)
     app.include_router(system_router)
     app.include_router(status_router, prefix=settings.api_v1_prefix)
+    app.include_router(auth_router)
 
     return app
