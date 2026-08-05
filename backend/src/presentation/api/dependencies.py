@@ -3,8 +3,10 @@
 from typing import Annotated, cast
 
 from fastapi import Depends, Request
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.core.settings import AppSettings
+from src.infrastructure.session import get_db_session
 
 
 def get_app_settings(request: Request) -> AppSettings:
@@ -14,3 +16,4 @@ def get_app_settings(request: Request) -> AppSettings:
 
 
 SettingsDependency = Annotated[AppSettings, Depends(get_app_settings)]
+DatabaseSessionDependency = Annotated[AsyncSession, Depends(get_db_session)]

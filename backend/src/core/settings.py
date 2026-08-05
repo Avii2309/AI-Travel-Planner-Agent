@@ -57,6 +57,26 @@ class AppSettings(BaseSettings):
     log_level: str = "INFO"
     log_directory: Path = REPOSITORY_ROOT / "logs"
     docs_enabled: bool = True
+    database_url: str = Field(
+        default="postgresql+asyncpg://postgres:postgres@localhost:5432/ai_travel_planner",
+        validation_alias="DATABASE_URL",
+    )
+    database_pool_size: int = Field(default=10, ge=1, validation_alias="DATABASE_POOL_SIZE")
+    database_max_overflow: int = Field(
+        default=20,
+        ge=0,
+        validation_alias="DATABASE_MAX_OVERFLOW",
+    )
+    database_pool_timeout: int = Field(
+        default=30,
+        ge=1,
+        validation_alias="DATABASE_POOL_TIMEOUT",
+    )
+    database_pool_recycle: int = Field(
+        default=1800,
+        ge=0,
+        validation_alias="DATABASE_POOL_RECYCLE",
+    )
 
     @field_validator("log_directory", mode="before")
     @classmethod

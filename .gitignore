@@ -18,8 +18,7 @@ env/
 htmlcov/
 
 # Alembic and local data
-backend/alembic/versions/*.py
-!backend/alembic/versions/.gitkeep
+# Migration revisions are source-controlled; only local databases are ignored.
 *.sqlite3
 
 # Node / Next.js

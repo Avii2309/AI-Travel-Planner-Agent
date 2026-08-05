@@ -1,8 +1,10 @@
 """Unauthenticated service discovery and health routes."""
 
-from fastapi import APIRouter
+from fastapi import APIRouter, HTTPException, status
+from sqlalchemy.exc import SQLAlchemyError
 
-from src.presentation.api.dependencies import SettingsDependency
+from src.infrastructure.database import check_database_connection
+from src.presentation.api.dependencies import DatabaseSessionDependency, SettingsDependency
 
 router = APIRouter(tags=["system"])
 
@@ -19,7 +21,15 @@ async def root(settings: SettingsDependency) -> dict[str, str]:
 
 
 @router.get("/health", summary="Health check")
-async def health_check() -> dict[str, str]:
-    """Confirm that the API process is available."""
+async def health_check(session: DatabaseSessionDependency) -> dict[str, str]:
+    """Confirm that the API process and PostgreSQL connection are available."""
 
-    return {"status": "healthy"}
+    try:
+        await check_database_connection(session)
+    except SQLAlchemyError as error:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Database is unavailable.",
+        ) from error
+
+    return {"status": "healthy", "database": "connected"}
