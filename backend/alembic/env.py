@@ -11,6 +11,7 @@ from sqlalchemy.ext.asyncio import AsyncEngine, async_engine_from_config
 from src.core.settings import get_settings
 from src.auth.models import User
 from src.infrastructure.base import Base
+from src.trips.models import Trip
 
 config = context.config
 

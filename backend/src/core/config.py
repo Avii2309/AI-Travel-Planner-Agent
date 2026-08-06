@@ -13,6 +13,7 @@ from src.presentation.api.exceptions.handlers import register_exception_handlers
 from src.presentation.api.middleware.registration import register_middleware
 from src.presentation.api.routers.status import router as status_router
 from src.presentation.api.routers.system import router as system_router
+from src.trips.router import router as trips_router
 
 
 def create_application(settings: AppSettings) -> FastAPI:
@@ -46,5 +47,6 @@ def create_application(settings: AppSettings) -> FastAPI:
     app.include_router(system_router)
     app.include_router(status_router, prefix=settings.api_v1_prefix)
     app.include_router(auth_router)
+    app.include_router(trips_router)
 
     return app
