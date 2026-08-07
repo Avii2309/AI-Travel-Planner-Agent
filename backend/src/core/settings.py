@@ -89,6 +89,14 @@ class AppSettings(BaseSettings):
         le=1440,
         validation_alias="JWT_ACCESS_TOKEN_EXPIRE_MINUTES",
     )
+    openai_api_key: SecretStr | None = Field(default=None, validation_alias="OPENAI_API_KEY")
+    openai_model: str = Field(default="gpt-4.1-mini", validation_alias="OPENAI_MODEL")
+    openai_timeout_seconds: float = Field(
+        default=30,
+        gt=0,
+        le=120,
+        validation_alias="OPENAI_TIMEOUT_SECONDS",
+    )
 
     @field_validator("log_directory", mode="before")
     @classmethod

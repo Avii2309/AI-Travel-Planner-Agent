@@ -16,3 +16,6 @@ passlib[bcrypt]>=1.7.4,<2.0
 bcrypt>=4.0,<4.1
 python-jose[cryptography]>=3.3,<4.0
 email-validator>=2.2,<3.0
+
+# AI provider
+openai>=1.66,<2.0
