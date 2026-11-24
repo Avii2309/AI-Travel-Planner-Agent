@@ -47,6 +47,21 @@ async def handle_validation_exception(
 ) -> JSONResponse:
     """Render invalid client input without exposing internal details."""
 
+    if request.method == "POST" and request.url.path.rstrip("/").endswith("/trips"):
+        for issue in exc.errors():
+            location = issue.get("loc", ())
+            field = location[-1] if location else None
+            if field in {"start_date", "end_date"}:
+                label = "Start date" if field == "start_date" else "End date"
+                return JSONResponse(
+                    status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                    content={
+                        "success": False,
+                        "error_code": "INVALID_DATE",
+                        "field": field,
+                        "message": f"{label} is required and must be a valid date.",
+                    },
+                )
     return JSONResponse(
         status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
         content=_error_payload(

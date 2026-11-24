@@ -3,6 +3,7 @@
 from enum import Enum
 from functools import lru_cache
 from pathlib import Path
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from pydantic import Field, SecretStr, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -54,7 +55,7 @@ class AppSettings(BaseSettings):
     host: str = "0.0.0.0"
     port: int = 8000
     api_v1_prefix: str = "/api/v1"
-    cors_origins: list[str] = ["http://localhost:3000"]
+    cors_origins: list[str] = ["http://localhost:3000", "http://localhost:5173"]
     log_level: str = "INFO"
     log_directory: Path = REPOSITORY_ROOT / "logs"
     docs_enabled: bool = True
@@ -89,13 +90,38 @@ class AppSettings(BaseSettings):
         le=1440,
         validation_alias="JWT_ACCESS_TOKEN_EXPIRE_MINUTES",
     )
-    openai_api_key: SecretStr | None = Field(default=None, validation_alias="OPENAI_API_KEY")
-    openai_model: str = Field(default="gpt-4.1-mini", validation_alias="OPENAI_MODEL")
-    openai_timeout_seconds: float = Field(
+    gemini_api_key: SecretStr | None = Field(default=None, validation_alias="GEMINI_API_KEY")
+    gemini_model: str = Field(default="gemini-3.5-flash", validation_alias="GEMINI_MODEL")
+    gemini_timeout_seconds: float = Field(
         default=30,
         gt=0,
         le=120,
-        validation_alias="OPENAI_TIMEOUT_SECONDS",
+        validation_alias="GEMINI_TIMEOUT_SECONDS",
+    )
+    google_places_api_key: SecretStr | None = Field(
+        default=None,
+        validation_alias="GOOGLE_PLACES_API_KEY",
+    )
+    google_maps_api_key: SecretStr | None = Field(
+        default=None,
+        validation_alias="GOOGLE_MAPS_API_KEY",
+    )
+    google_places_timeout_seconds: float = Field(
+        default=8,
+        gt=0,
+        le=30,
+        validation_alias="GOOGLE_PLACES_TIMEOUT_SECONDS",
+    )
+    geoapify_api_key: SecretStr | None = Field(default=None, validation_alias="GEOAPIFY_API_KEY")
+    geoapify_timeout_seconds: float = Field(
+        default=8,
+        gt=0,
+        le=30,
+        validation_alias="GEOAPIFY_TIMEOUT_SECONDS",
+    )
+    application_timezone: str = Field(
+        default="Asia/Kolkata",
+        validation_alias="APP_TIMEZONE",
     )
 
     @field_validator("log_directory", mode="before")
@@ -105,6 +131,26 @@ class AppSettings(BaseSettings):
 
         path = Path(value)
         return path if path.is_absolute() else REPOSITORY_ROOT / path
+
+    @field_validator("application_timezone")
+    @classmethod
+    def validate_application_timezone(cls, value: str) -> str:
+        """Reject unknown IANA timezone names at startup."""
+
+        try:
+            ZoneInfo(value)
+        except ZoneInfoNotFoundError as error:
+            raise ValueError("APP_TIMEZONE must be a valid IANA timezone") from error
+        return value
+
+    @property
+    def effective_google_places_api_key(self) -> SecretStr | None:
+        """Prefer the Places-specific key while accepting a Maps Platform key."""
+
+        for key in (self.google_places_api_key, self.google_maps_api_key):
+            if key is not None and key.get_secret_value().strip():
+                return key
+        return None
 
     @model_validator(mode="after")
     def validate_production_jwt_secret(self) -> "AppSettings":

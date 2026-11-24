@@ -7,6 +7,8 @@ import { AuthLayout } from "@/layouts/auth-layout";
 import { DashboardPage } from "@/pages/dashboard-page";
 import { CreateTripPage } from "@/pages/create-trip-page";
 import { EditTripPage } from "@/pages/edit-trip-page";
+import { ItinerariesPage } from "@/pages/itineraries-page";
+import { ItineraryPage } from "@/pages/itinerary-page";
 import { LandingPage } from "@/pages/landing-page";
 import { LoginPage } from "@/pages/login-page";
 import { RegisterPage } from "@/pages/register-page";
@@ -37,10 +39,12 @@ export function App() {
             <Route element={<ProtectedRoute />}>
               <Route element={<AppLayout />}>
                 <Route element={<DashboardPage />} path="/dashboard" />
+                <Route element={<ItinerariesPage />} path="/itineraries" />
                 <Route element={<TripsPage />} path="/trips" />
                 <Route element={<CreateTripPage />} path="/trips/new" />
                 <Route element={<TripDetailsPage />} path="/trips/:tripId" />
                 <Route element={<EditTripPage />} path="/trips/:tripId/edit" />
+                <Route element={<ItineraryPage />} path="/trips/:tripId/itinerary" />
               </Route>
             </Route>
             <Route element={<Navigate replace to="/" />} path="*" />

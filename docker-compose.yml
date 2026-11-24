@@ -20,16 +20,20 @@ services:
     build:
       context: .
       dockerfile: backend/docker/Dockerfile
+    env_file:
+      - path: .env
+        required: false
+      - path: backend/.env
+        required: false
     environment:
       APP_ENV: ${APP_ENV:-development}
       LOG_LEVEL: ${LOG_LEVEL:-INFO}
+      CORS_ORIGINS: '${CORS_ORIGINS:-["http://localhost:3000","http://localhost:5173"]}'
       DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@postgres:5432/${POSTGRES_DB:-ai_travel_planner}
       JWT_SECRET_KEY: ${JWT_SECRET_KEY:-replace-this-development-secret-before-production}
       JWT_ALGORITHM: ${JWT_ALGORITHM:-HS256}
       JWT_ACCESS_TOKEN_EXPIRE_MINUTES: ${JWT_ACCESS_TOKEN_EXPIRE_MINUTES:-30}
-      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
-      OPENAI_MODEL: ${OPENAI_MODEL:-gpt-4.1-mini}
-      OPENAI_TIMEOUT_SECONDS: ${OPENAI_TIMEOUT_SECONDS:-30}
+      APP_TIMEZONE: ${APP_TIMEZONE:-Asia/Kolkata}
     ports:
       - "8000:8000"
     depends_on:

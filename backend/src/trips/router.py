@@ -4,11 +4,17 @@ from typing import Annotated
 from uuid import UUID
 
 from fastapi import APIRouter, HTTPException, Query, Response, status
+from fastapi.responses import JSONResponse
+from sqlalchemy.exc import SQLAlchemyError
 
 from src.auth.security import CurrentUserDependency
-from src.presentation.api.dependencies import DatabaseSessionDependency
+from src.locations.router import GeoapifyProviderDependency
+from src.presentation.api.dependencies import DatabaseSessionDependency, SettingsDependency
 from src.trips.schemas import TripCreate, TripResponse, TripUpdate
 from src.trips.service import (
+    TripDateValidationError,
+    TripLocationServiceError,
+    TripLocationValidationError,
     TripNotFoundError,
     create_trip,
     delete_trip,
@@ -33,10 +39,58 @@ async def create(
     request: TripCreate,
     session: DatabaseSessionDependency,
     current_user: CurrentUserDependency,
-) -> TripResponse:
+    geoapify_provider: GeoapifyProviderDependency,
+    settings: SettingsDependency,
+) -> TripResponse | JSONResponse:
     """Create a trip owned by the authenticated user."""
 
-    return await create_trip(session, current_user, request)
+    try:
+        return await create_trip(
+            session,
+            current_user,
+            request,
+            geoapify_provider=geoapify_provider,
+            timezone_name=settings.application_timezone,
+        )
+    except TripDateValidationError as error:
+        return JSONResponse(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            content={
+                "success": False,
+                "error_code": error.code,
+                "field": error.field,
+                "message": str(error),
+            },
+        )
+    except TripLocationValidationError as error:
+        return JSONResponse(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            content={
+                "success": False,
+                "error_code": error.code,
+                "field": error.field,
+                "message": str(error),
+            },
+        )
+    except TripLocationServiceError as error:
+        return JSONResponse(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            content={
+                "success": False,
+                "error_code": error.code,
+                "field": error.field,
+                "message": str(error),
+            },
+        )
+    except SQLAlchemyError:
+        return JSONResponse(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            content={
+                "success": False,
+                "error": "PERSISTENCE_ERROR",
+                "message": "The trip could not be saved. Please try again.",
+            },
+        )
 
 
 @router.get("", response_model=list[TripResponse], summary="List my trips")
@@ -71,15 +125,63 @@ async def update_owned_trip(
     request: TripUpdate,
     session: DatabaseSessionDependency,
     current_user: CurrentUserDependency,
-) -> TripResponse:
+    geoapify_provider: GeoapifyProviderDependency,
+    settings: SettingsDependency,
+) -> TripResponse | JSONResponse:
     """Partially update an owned trip while preserving valid dates."""
 
     try:
-        return await update_trip(session, current_user, trip_id, request)
+        return await update_trip(
+            session,
+            current_user,
+            trip_id,
+            request,
+            geoapify_provider=geoapify_provider,
+            timezone_name=settings.application_timezone,
+        )
     except TripNotFoundError as error:
         raise _not_found_exception() from error
     except ValueError as error:
         raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(error)) from error
+    except TripDateValidationError as error:
+        return JSONResponse(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            content={
+                "success": False,
+                "error_code": error.code,
+                "field": error.field,
+                "message": str(error),
+            },
+        )
+    except TripLocationValidationError as error:
+        return JSONResponse(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            content={
+                "success": False,
+                "error_code": error.code,
+                "field": error.field,
+                "message": str(error),
+            },
+        )
+    except TripLocationServiceError as error:
+        return JSONResponse(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            content={
+                "success": False,
+                "error_code": error.code,
+                "field": error.field,
+                "message": str(error),
+            },
+        )
+    except SQLAlchemyError:
+        return JSONResponse(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            content={
+                "success": False,
+                "error": "PERSISTENCE_ERROR",
+                "message": "The trip could not be saved. Please try again.",
+            },
+        )
 
 
 @router.delete("/{trip_id}", status_code=status.HTTP_204_NO_CONTENT, summary="Delete one of my trips")

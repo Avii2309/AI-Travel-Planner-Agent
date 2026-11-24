@@ -5,7 +5,12 @@ import json
 import unittest
 from uuid import uuid4
 
-from src.itinerary.schemas import InvalidItineraryResponseError, parse_itinerary_response
+from src.locations.schemas import VerifiedPlace
+from src.itinerary.schemas import (
+    InvalidItineraryResponseError,
+    itinerary_response_schema,
+    parse_itinerary_response,
+)
 
 
 def _response(day: int = 1) -> str:
@@ -66,6 +71,32 @@ class ItineraryResponseParserTests(unittest.TestCase):
                 generated_at=datetime.now(timezone.utc),
                 expected_days=1,
             )
+
+    def test_rejects_an_activity_not_present_in_verified_places(self) -> None:
+        verified_place = VerifiedPlace(
+            place_id="google-place-1",
+            name="Verified Attraction",
+            formatted_address="1 Verified Road",
+            latitude=26.9,
+            longitude=75.8,
+            types=["tourist_attraction"],
+        )
+        response = json.loads(_response())
+        response["days"][0]["activities"][0]["place_id"] = "invented-place-id"
+
+        with self.assertRaisesRegex(InvalidItineraryResponseError, "unverified"):
+            parse_itinerary_response(
+                json.dumps(response),
+                trip_id=uuid4(),
+                generated_at=datetime.now(timezone.utc),
+                expected_days=1,
+                verified_places=[verified_place],
+            )
+
+    def test_generation_schema_requires_place_id_for_every_activity(self) -> None:
+        schema = itinerary_response_schema()
+        activity_schema = schema["$defs"]["ItineraryActivity"]
+        self.assertIn("place_id", activity_schema["required"])
 
 
 if __name__ == "__main__":

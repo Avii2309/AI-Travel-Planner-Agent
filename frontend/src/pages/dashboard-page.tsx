@@ -50,12 +50,14 @@ export function DashboardPage() {
             </CardContent>
           </Card>
           </Link>
-          <Card className="border-cyan-100 bg-cyan-50">
+          <Link className="block" to={tripsQuery.data && tripsQuery.data.length > 0 ? "/trips" : "/trips/new"}>
+          <Card className="border-cyan-100 bg-cyan-50 transition hover:border-cyan-300 hover:shadow-md">
             <CardContent className="flex gap-4 pt-5">
               <Sparkles aria-hidden="true" className="mt-0.5 size-5 text-cyan-700" />
-              <div><h3 className="font-semibold text-slate-900">AI itineraries</h3><p className="mt-1 text-sm text-slate-600">Itinerary generation will be available in the next phase.</p></div>
+              <div><h3 className="font-semibold text-slate-900">Generate an itinerary <ArrowRight aria-hidden="true" className="ml-1 inline size-4" /></h3><p className="mt-1 text-sm text-slate-600">{tripsQuery.data && tripsQuery.data.length > 0 ? "Choose a saved trip to create a day-by-day AI plan." : "Create a trip first, then let AI plan each day."}</p></div>
             </CardContent>
           </Card>
+          </Link>
         </div>
       </section>
     </div>

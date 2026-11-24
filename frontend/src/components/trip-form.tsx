@@ -1,14 +1,27 @@
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useEffect } from "react";
-import { useForm } from "react-hook-form";
+import { useForm, useWatch } from "react-hook-form";
 import { z } from "zod";
 
+import { getApiErrorMessage, getApiFieldError } from "@/api/client";
 import { Loader } from "@/components/loader";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import type { TripCreate, TripResponse } from "@/types/trip";
+
+function getApplicationDate(): string {
+  const timezone = import.meta.env.VITE_APP_TIMEZONE || "Asia/Kolkata";
+  const parts = new Intl.DateTimeFormat("en-CA", {
+    timeZone: timezone,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).formatToParts(new Date());
+  const part = (type: Intl.DateTimeFormatPartTypes) => parts.find((item) => item.type === type)?.value ?? "";
+  return `${part("year")}-${part("month")}-${part("day")}`;
+}
 
 const isPreferencesObject = (value: string) => {
   if (!value.trim()) {
@@ -22,12 +35,20 @@ const isPreferencesObject = (value: string) => {
   }
 };
 
+const isValidDate = (value: string) => {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) {
+    return false;
+  }
+  const parsedDate = new Date(`${value}T00:00:00.000Z`);
+  return !Number.isNaN(parsedDate.getTime()) && parsedDate.toISOString().slice(0, 10) === value;
+};
+
 const tripFormSchema = z
   .object({
     source: z.string().trim().min(1, "Enter a departure location.").max(255, "Location is too long."),
     destination: z.string().trim().min(1, "Enter a destination.").max(255, "Location is too long."),
-    start_date: z.string().min(1, "Select a start date."),
-    end_date: z.string().min(1, "Select an end date."),
+    start_date: z.string().min(1, "Select a start date.").refine(isValidDate, "Enter a valid start date."),
+    end_date: z.string().min(1, "Select an end date.").refine(isValidDate, "Enter a valid end date."),
     budget: z.coerce.number().positive("Budget must be greater than zero.").max(9_999_999_999.99, "Budget is too large."),
     travelers: z.coerce.number().int("Use a whole number.").min(1, "At least one traveler is required.").max(100, "A maximum of 100 travelers is allowed."),
     preferences: z.string().refine(isPreferencesObject, "Preferences must be a valid JSON object."),
@@ -35,6 +56,10 @@ const tripFormSchema = z
   .refine((values) => values.end_date >= values.start_date, {
     message: "End date must be on or after the start date.",
     path: ["end_date"],
+  })
+  .refine((values) => values.start_date >= getApplicationDate(), {
+    message: "Trip start date cannot be in the past. Please select today or a future date.",
+    path: ["start_date"],
   });
 
 type TripFormValues = z.infer<typeof tripFormSchema>;
@@ -43,7 +68,6 @@ interface TripFormProps {
   initialTrip?: TripResponse;
   isSubmitting: boolean;
   submitLabel: string;
-  errorMessage?: string;
   onSubmit: (values: TripCreate) => Promise<void>;
 }
 
@@ -69,16 +93,21 @@ function valuesFromTrip(trip: TripResponse): TripFormValues {
   };
 }
 
-export function TripForm({ initialTrip, isSubmitting, submitLabel, errorMessage, onSubmit }: TripFormProps) {
+export function TripForm({ initialTrip, isSubmitting, submitLabel, onSubmit }: TripFormProps) {
   const {
+    control,
     formState: { errors },
     handleSubmit,
     register,
     reset,
+    clearErrors,
+    setError,
   } = useForm<TripFormValues>({
     defaultValues: initialTrip ? valuesFromTrip(initialTrip) : defaultValues,
     resolver: zodResolver(tripFormSchema),
   });
+  const startDate = useWatch({ control, name: "start_date" });
+  const applicationDate = getApplicationDate();
 
   useEffect(() => {
     reset(initialTrip ? valuesFromTrip(initialTrip) : defaultValues);
@@ -86,7 +115,26 @@ export function TripForm({ initialTrip, isSubmitting, submitLabel, errorMessage,
 
   const submit = async (values: TripFormValues) => {
     const preferences = values.preferences.trim() ? JSON.parse(values.preferences) as Record<string, unknown> : {};
-    await onSubmit({ ...values, preferences });
+    clearErrors("root.server");
+    try {
+      await onSubmit({ ...values, preferences });
+    } catch (error) {
+      const fieldError = getApiFieldError(error);
+      const field = fieldError?.field === "start_location" ? "source" : fieldError?.field;
+      if (
+        field === "source" ||
+        field === "destination" ||
+        field === "start_date" ||
+        field === "end_date"
+      ) {
+        setError(field, {
+          type: "server",
+          message: fieldError?.message ?? getApiErrorMessage(error),
+        });
+        return;
+      }
+      setError("root.server", { type: "server", message: getApiErrorMessage(error) });
+    }
   };
 
   return (
@@ -106,12 +154,17 @@ export function TripForm({ initialTrip, isSubmitting, submitLabel, errorMessage,
       <div className="grid gap-5 sm:grid-cols-2">
         <div className="space-y-2">
           <Label htmlFor="start_date">Start date</Label>
-          <Input id="start_date" type="date" {...register("start_date")} />
+          <Input id="start_date" min={applicationDate} type="date" {...register("start_date")} />
           {errors.start_date && <p className="text-sm text-rose-600">{errors.start_date.message}</p>}
         </div>
         <div className="space-y-2">
           <Label htmlFor="end_date">End date</Label>
-          <Input id="end_date" type="date" {...register("end_date")} />
+          <Input
+            id="end_date"
+            min={startDate && startDate > applicationDate ? startDate : applicationDate}
+            type="date"
+            {...register("end_date")}
+          />
           {errors.end_date && <p className="text-sm text-rose-600">{errors.end_date.message}</p>}
         </div>
       </div>
@@ -133,10 +186,11 @@ export function TripForm({ initialTrip, isSubmitting, submitLabel, errorMessage,
         <p className="text-xs leading-5 text-slate-500">Use a JSON object to store flexible trip preferences. Leave it as {'{}'} when you have none.</p>
         {errors.preferences && <p className="text-sm text-rose-600">{errors.preferences.message}</p>}
       </div>
-      {errorMessage && <p className="rounded-lg bg-rose-50 p-3 text-sm text-rose-700" role="alert">{errorMessage}</p>}
+      {errors.root?.server?.message && <p className="rounded-lg bg-rose-50 p-3 text-sm text-rose-700" role="alert">{errors.root.server.message}</p>}
+      {isSubmitting && <p className="text-sm text-slate-600" role="status">Validating trip details...</p>}
       <Button disabled={isSubmitting} type="submit">
         {isSubmitting && <Loader className="mr-2 size-4 border-teal-200 border-t-white" />}
-        {submitLabel}
+        {isSubmitting ? "Validating..." : submitLabel}
       </Button>
     </form>
   );

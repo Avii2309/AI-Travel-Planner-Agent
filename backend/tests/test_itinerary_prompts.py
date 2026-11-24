@@ -19,6 +19,7 @@ class ItineraryPromptTests(unittest.TestCase):
             budget=Decimal("25000.00"),
             travelers=2,
             preferences={"pace": "relaxed", "diet": "vegetarian"},
+            verified_places=[],
         )
 
         self.assertIn("Source: Mumbai", prompt)
@@ -26,7 +27,7 @@ class ItineraryPromptTests(unittest.TestCase):
         self.assertIn("Duration: 3 days", prompt)
         self.assertIn("Total budget: 25000.00", prompt)
         self.assertIn('"diet": "vegetarian"', prompt)
-        self.assertIn("food suggestions", prompt)
+        self.assertIn("Food entries may contain only verified restaurant names", prompt)
 
 
 if __name__ == "__main__":

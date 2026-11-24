@@ -33,14 +33,6 @@ class TripCreate(BaseModel):
             raise ValueError("location must contain non-whitespace characters")
         return normalized_value
 
-    @model_validator(mode="after")
-    def validate_date_range(self) -> "TripCreate":
-        """Require an end date on or after the start date."""
-
-        if self.end_date < self.start_date:
-            raise ValueError("end_date must be on or after start_date")
-        return self
-
 
 class TripUpdate(BaseModel):
     """Partial update input for a user-owned trip."""
@@ -94,3 +86,13 @@ class TripResponse(BaseModel):
     travelers: int
     preferences: dict[str, Any]
     created_at: datetime
+    destination_place_id: str | None = None
+    destination_name: str | None = None
+    destination_address: str | None = None
+    destination_latitude: float | None = None
+    destination_longitude: float | None = None
+    source_place_id: str | None = None
+    source_name: str | None = None
+    source_address: str | None = None
+    source_latitude: float | None = None
+    source_longitude: float | None = None

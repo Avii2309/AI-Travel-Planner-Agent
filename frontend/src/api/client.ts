@@ -3,10 +3,20 @@ import axios, { AxiosError } from "axios";
 const TOKEN_STORAGE_KEY = "ai-travel-planner.access-token";
 
 interface ApiErrorPayload {
+  success?: boolean;
+  error_code?: string;
+  field?: string;
   detail?: string;
-  error?: {
+  message?: string;
+  error?: string | {
     message?: string;
   };
+}
+
+export interface ApiFieldError {
+  code?: string;
+  field?: string;
+  message?: string;
 }
 
 export const tokenStorage = {
@@ -51,7 +61,10 @@ export function getApiErrorMessage(error: unknown): string {
   }
 
   const payload = error.response.data;
-  if (typeof payload?.error?.message === "string") {
+  if (typeof payload?.message === "string") {
+    return payload.message;
+  }
+  if (typeof payload?.error === "object" && typeof payload.error.message === "string") {
     return payload.error.message;
   }
   if (typeof payload?.detail === "string") {
@@ -66,4 +79,24 @@ export function getApiErrorMessage(error: unknown): string {
     500: "The service encountered an error. Please try again later.",
   };
   return messages[error.response.status] ?? "The request could not be completed.";
+}
+
+export function getApiFieldError(error: unknown): ApiFieldError | undefined {
+  if (!error || typeof error !== "object" || !("response" in error)) {
+    return undefined;
+  }
+  const response = error.response;
+  if (!response || typeof response !== "object" || !("data" in response)) {
+    return undefined;
+  }
+  const payload = response.data;
+  if (!payload || typeof payload !== "object") {
+    return undefined;
+  }
+  const errorPayload = payload as ApiErrorPayload;
+  return {
+    code: errorPayload.error_code,
+    field: errorPayload.field,
+    message: errorPayload.message,
+  };
 }

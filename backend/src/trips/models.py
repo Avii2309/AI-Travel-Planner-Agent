@@ -5,7 +5,7 @@ from decimal import Decimal
 from typing import Any
 from uuid import UUID
 
-from sqlalchemy import CheckConstraint, Date, ForeignKey, Index, Numeric, String, Uuid, text
+from sqlalchemy import CheckConstraint, Date, Float, ForeignKey, Index, Numeric, String, Uuid, text
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -29,7 +29,17 @@ class Trip(UUIDPrimaryKeyMixin, TimestampMixin, Base):
         nullable=False,
     )
     source: Mapped[str] = mapped_column(String(255), nullable=False)
+    source_place_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    source_name: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    source_address: Mapped[str | None] = mapped_column(String(512), nullable=True)
+    source_latitude: Mapped[float | None] = mapped_column(Float, nullable=True)
+    source_longitude: Mapped[float | None] = mapped_column(Float, nullable=True)
     destination: Mapped[str] = mapped_column(String(255), nullable=False)
+    destination_place_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    destination_name: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    destination_address: Mapped[str | None] = mapped_column(String(512), nullable=True)
+    destination_latitude: Mapped[float | None] = mapped_column(Float, nullable=True)
+    destination_longitude: Mapped[float | None] = mapped_column(Float, nullable=True)
     start_date: Mapped[date] = mapped_column(Date, nullable=False)
     end_date: Mapped[date] = mapped_column(Date, nullable=False)
     budget: Mapped[Decimal] = mapped_column(Numeric(12, 2), nullable=False)

@@ -12,6 +12,7 @@ from src.core.settings import get_settings
 from src.auth.models import User
 from src.infrastructure.base import Base
 from src.trips.models import Trip
+from src.itinerary.models import Itinerary
 
 config = context.config
 

@@ -5,8 +5,10 @@ from typing import Any
 from uuid import UUID
 
 from sqlalchemy import select
+from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from src.core.logger import get_error_logger
 from src.trips.models import Trip
 
 
@@ -21,9 +23,14 @@ class TripRepository:
 
         trip = Trip(user_id=user_id, **dict(values))
         self.session.add(trip)
-        await self.session.commit()
-        await self.session.refresh(trip)
-        return trip
+        try:
+            await self.session.commit()
+            await self.session.refresh(trip)
+            return trip
+        except SQLAlchemyError:
+            await self.session.rollback()
+            get_error_logger().exception("Failed to create a trip for user_id=%s", user_id)
+            raise
 
     async def list_for_user(
         self,
@@ -53,11 +60,17 @@ class TripRepository:
     async def update(self, trip: Trip, values: Mapping[str, Any]) -> Trip:
         """Apply validated values to an owned trip and persist them."""
 
+        trip_id = trip.id
         for key, value in values.items():
             setattr(trip, key, value)
-        await self.session.commit()
-        await self.session.refresh(trip)
-        return trip
+        try:
+            await self.session.commit()
+            await self.session.refresh(trip)
+            return trip
+        except SQLAlchemyError:
+            await self.session.rollback()
+            get_error_logger().exception("Failed to update trip_id=%s", trip_id)
+            raise
 
     async def delete(self, trip: Trip) -> None:
         """Permanently delete an owned trip."""

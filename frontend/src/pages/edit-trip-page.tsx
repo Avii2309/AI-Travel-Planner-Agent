@@ -1,5 +1,4 @@
 import { ArrowLeft } from "lucide-react";
-import { useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 
 import { getApiErrorMessage } from "@/api/client";
@@ -14,16 +13,10 @@ export function EditTripPage() {
   const navigate = useNavigate();
   const tripQuery = useTrip(tripId);
   const updateTrip = useUpdateTrip();
-  const [submitError, setSubmitError] = useState<string | undefined>();
 
   const submit = async (values: TripCreate) => {
-    setSubmitError(undefined);
-    try {
-      const trip = await updateTrip.mutateAsync({ tripId, values });
-      navigate(`/trips/${trip.id}`, { replace: true });
-    } catch (error) {
-      setSubmitError(getApiErrorMessage(error));
-    }
+    const trip = await updateTrip.mutateAsync({ tripId, values });
+    navigate(`/trips/${trip.id}`, { replace: true });
   };
 
   if (tripQuery.isPending) {
@@ -38,7 +31,7 @@ export function EditTripPage() {
     <div className="mx-auto max-w-3xl space-y-6">
       <Link className="inline-flex items-center gap-2 text-sm font-semibold text-slate-600 hover:text-teal-700" to={`/trips/${tripId}`}><ArrowLeft aria-hidden="true" className="size-4" />Back to trip</Link>
       <div><p className="text-sm font-semibold text-teal-700">Trip management</p><h1 className="mt-1 text-3xl font-bold tracking-tight text-slate-950">Edit trip</h1><p className="mt-2 text-slate-600">Update your trip details and preferences.</p></div>
-      <Card><CardContent className="pt-6"><TripForm errorMessage={submitError} initialTrip={tripQuery.data} isSubmitting={updateTrip.isPending} onSubmit={submit} submitLabel="Save changes" /></CardContent></Card>
+      <Card><CardContent className="pt-6"><TripForm initialTrip={tripQuery.data} isSubmitting={updateTrip.isPending} onSubmit={submit} submitLabel="Save changes" /></CardContent></Card>
     </div>
   );
 }

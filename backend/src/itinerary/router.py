@@ -4,8 +4,13 @@ from typing import Annotated
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Path, status
+from fastapi.responses import JSONResponse
+from sqlalchemy.exc import SQLAlchemyError
 
 from src.auth.security import CurrentUserDependency
+from src.locations.providers import GooglePlacesQuotaExceededError, GooglePlacesUnavailableError
+from src.locations.router import PlacesProviderDependency
+from src.locations.service import InvalidLocationError, NoVerifiedAttractionsError
 from src.itinerary.providers import (
     AIProviderExecutionError,
     AIProviderRateLimitError,
@@ -14,11 +19,20 @@ from src.itinerary.providers import (
     BaseAIProvider,
     get_ai_provider,
 )
-from src.itinerary.schemas import InvalidItineraryResponseError, ItineraryResponse
-from src.itinerary.service import ItineraryTripNotFoundError, generate_itinerary
+from src.itinerary.schemas import InvalidItineraryResponseError, ItineraryListItem, ItineraryResponse
+from src.itinerary.service import (
+    InvalidStoredItineraryError,
+    ItineraryNotFoundError,
+    ItineraryTripNotFoundError,
+    generate_itinerary,
+    get_itinerary,
+    list_itineraries,
+)
 from src.presentation.api.dependencies import DatabaseSessionDependency, SettingsDependency
+from src.trips.service import TripDateValidationError
 
 router = APIRouter(prefix="/trips", tags=["itineraries"])
+list_router = APIRouter(prefix="/itineraries", tags=["itineraries"])
 TripId = Annotated[
     UUID,
     Path(
@@ -26,36 +40,6 @@ TripId = Annotated[
         examples={"owned_trip": {"summary": "Owned trip", "value": "550e8400-e29b-41d4-a716-446655440000"}},
     ),
 ]
-
-_ITINERARY_RESPONSE_EXAMPLE = {
-    "trip_id": "550e8400-e29b-41d4-a716-446655440000",
-    "generated_at": "2026-08-07T10:30:00Z",
-    "days": [
-        {
-            "day": 1,
-            "title": "Arrival and historic centre",
-            "activities": [
-                {
-                    "time": "10:00-12:00",
-                    "title": "Old Town walk",
-                    "description": "Explore the central landmarks at an easy pace.",
-                    "location": "Old Town",
-                    "estimated_cost": 15.0,
-                }
-            ],
-            "sightseeing": ["Old Town"],
-            "food": ["Try a local lunch near the main square"],
-            "transport": "Use the airport train and walk within the centre.",
-            "estimated_cost": 65.0,
-            "travel_tips": ["Carry a refillable water bottle."],
-            "optional_activities": ["Sunset viewpoint"],
-        }
-    ],
-    "summary": "A relaxed city break with a mix of landmarks and local food.",
-    "estimated_total_cost": 65.0,
-    "packing_tips": ["Comfortable walking shoes", "Light rain jacket"],
-    "best_visiting_time": "Early morning for major sights and sunset for viewpoints.",
-}
 
 
 def get_itinerary_provider(settings: SettingsDependency) -> BaseAIProvider:
@@ -77,7 +61,7 @@ ItineraryProviderDependency = Annotated[BaseAIProvider, Depends(get_itinerary_pr
         "send a Bearer token for the trip owner."
     ),
     responses={
-        200: {"description": "Validated itinerary", "content": {"application/json": {"example": _ITINERARY_RESPONSE_EXAMPLE}}},
+        200: {"description": "Validated itinerary containing Google Places-verified attractions"},
         404: {"description": "Trip does not exist or is not owned by the caller"},
         429: {"description": "AI provider rate limit reached"},
         502: {"description": "AI provider returned an invalid response"},
@@ -90,13 +74,64 @@ async def generate_trip_itinerary(
     session: DatabaseSessionDependency,
     current_user: CurrentUserDependency,
     provider: ItineraryProviderDependency,
-) -> ItineraryResponse:
+    places_provider: PlacesProviderDependency,
+    settings: SettingsDependency,
+) -> ItineraryResponse | JSONResponse:
     """Generate a structured itinerary for an owned trip."""
 
     try:
-        return await generate_itinerary(session, current_user, trip_id, provider)
+        return await generate_itinerary(
+            session,
+            current_user,
+            trip_id,
+            provider,
+            places_provider,
+            timezone_name=settings.application_timezone,
+        )
     except ItineraryTripNotFoundError as error:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Trip not found.") from error
+    except TripDateValidationError as error:
+        code = "INVALID_DATE_RANGE" if "end date" in str(error) else "PAST_START_DATE"
+        return JSONResponse(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            content={"success": False, "error": code, "message": str(error)},
+        )
+    except InvalidLocationError:
+        return JSONResponse(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            content={
+                "success": False,
+                "error": "INVALID_LOCATION",
+                "message": "The entered destination could not be verified. Please enter a valid location.",
+            },
+        )
+    except NoVerifiedAttractionsError:
+        return JSONResponse(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            content={
+                "success": False,
+                "error": "NO_VERIFIED_ATTRACTIONS",
+                "message": "Not enough verified attractions were found for this trip. Try a shorter trip or another destination.",
+            },
+        )
+    except GooglePlacesQuotaExceededError:
+        return JSONResponse(
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+            content={
+                "success": False,
+                "error": "GOOGLE_PLACES_QUOTA_EXCEEDED",
+                "message": "Google Places request quota was exceeded. Please try again later.",
+            },
+        )
+    except GooglePlacesUnavailableError as error:
+        return JSONResponse(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            content={
+                "success": False,
+                "error": "GOOGLE_PLACES_UNAVAILABLE",
+                "message": f"{error} No itinerary was generated.",
+            },
+        )
     except AIProviderRateLimitError as error:
         raise HTTPException(status_code=status.HTTP_429_TOO_MANY_REQUESTS, detail=str(error)) from error
     except AIProviderTimeoutError as error:
@@ -105,3 +140,43 @@ async def generate_trip_itinerary(
         raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=str(error)) from error
     except (AIProviderExecutionError, InvalidItineraryResponseError) as error:
         raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(error)) from error
+    except SQLAlchemyError:
+        return JSONResponse(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            content={
+                "success": False,
+                "error": "PERSISTENCE_ERROR",
+                "message": "The itinerary could not be saved. Please try again.",
+            },
+        )
+
+
+@router.get(
+    "/{trip_id}/itinerary",
+    response_model=ItineraryResponse,
+    summary="Get a saved AI travel itinerary",
+    responses={404: {"description": "Trip or itinerary does not exist or is not owned by the caller"}},
+)
+async def get_trip_itinerary(
+    trip_id: TripId,
+    session: DatabaseSessionDependency,
+    current_user: CurrentUserDependency,
+) -> ItineraryResponse:
+    """Retrieve the current persisted itinerary for one owned trip."""
+
+    try:
+        return await get_itinerary(session, current_user, trip_id)
+    except (ItineraryTripNotFoundError, ItineraryNotFoundError) as error:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Itinerary not found.") from error
+    except InvalidStoredItineraryError as error:
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Saved itinerary is unavailable.") from error
+
+
+@list_router.get("", response_model=list[ItineraryListItem], summary="List my saved AI itineraries")
+async def list_saved_itineraries(
+    session: DatabaseSessionDependency,
+    current_user: CurrentUserDependency,
+) -> list[ItineraryListItem]:
+    """Return metadata for itineraries accessible to the authenticated user."""
+
+    return await list_itineraries(session, current_user)
